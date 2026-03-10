@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "mcpServers": [
+    {
+      "id": "tasks-mcp-stdio",
+      "command": "python",
+      "args": ["mcp_tasks_server.py"],
+      "transport": { "type": "stdio" },
+      "env": {
+        "TASKS_API_BASE_URL": "https://api-organiza-tb.vercel.app"
+      }
+    },
+    {
+      "id": "tasks-mcp-sse",
+      "transport": {
+        "type": "sse",
+        "url": "http://localhost:8000/sse"
+      }
+    }
+  ]
+}
