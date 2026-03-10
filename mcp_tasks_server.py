@@ -205,7 +205,7 @@ async def delete_task(task_id: str, jwt: Optional[str] = None):
 def main():
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8000"))
-    transport = os.getenv("MCP_TRANSPORT", "sse").lower()
+    transport = os.getenv("MCP_TRANSPORT", "http").lower()
     http_path = os.getenv("MCP_HTTP_PATH", "/mcp")
 
     if transport == "http":

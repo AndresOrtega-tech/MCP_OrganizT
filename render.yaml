@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: tasks-mcp
+    env: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    region: oregon
+    envVars:
+      - key: TASKS_API_JWT
+        sync: false  # Bearer <token>
+      - key: TASKS_API_BASE_URL
+        value: https://api-organiza-tb.vercel.app
+      - key: MCP_TRANSPORT
+        value: http
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "10000"  # Render provides PORT; Dockerfile uses it automatically
