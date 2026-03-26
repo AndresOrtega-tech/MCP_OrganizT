@@ -2,10 +2,11 @@ import os
 from typing import List, Optional
 
 import httpx
+from dotenv import load_dotenv
 from fastmcp import FastMCP
 from pydantic import BaseModel, Field, validator
+from starlette.requests import Request
 from starlette.responses import JSONResponse
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -16,7 +17,7 @@ mcp = FastMCP(name="tasks-mcp")
 
 
 @mcp.custom_route("/health", methods=["GET"])
-async def health_check(_request):
+async def health_check(_request: Request):
     return JSONResponse({"status": "ok"})
 
 
@@ -71,20 +72,48 @@ class TaskUpdatePayload(BaseModel):
         return v
 
 
-async def _headers(token_override: Optional[str] = None) -> dict:
+def _extract_bearer_token(
+    request: Optional[Request] = None, token_override: Optional[str] = None
+) -> Optional[str]:
+    if token_override:
+        return token_override
+
+    if request is not None:
+        authorization = request.headers.get("authorization")
+        if authorization and authorization.lower().startswith("bearer "):
+            return authorization[7:].strip()
+
+    return API_JWT
+
+
+async def _headers(
+    request: Optional[Request] = None, token_override: Optional[str] = None
+) -> dict:
     headers = {"Content-Type": "application/json"}
-    token = token_override or API_JWT
+    token = _extract_bearer_token(request=request, token_override=token_override)
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return headers
 
 
-async def _client(token_override: Optional[str] = None) -> httpx.AsyncClient:
-    return httpx.AsyncClient(base_url=API_BASE_URL, timeout=15.0, headers=await _headers(token_override))
+async def _client(
+    request: Optional[Request] = None, token_override: Optional[str] = None
+) -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        base_url=API_BASE_URL,
+        timeout=15.0,
+        headers=await _headers(request=request, token_override=token_override),
+    )
 
 
-async def _request(method: str, path: str, token_override: Optional[str] = None, **kwargs):
-    async with await _client(token_override) as client:
+async def _request(
+    method: str,
+    path: str,
+    request: Optional[Request] = None,
+    token_override: Optional[str] = None,
+    **kwargs,
+):
+    async with await _client(request=request, token_override=token_override) as client:
         try:
             resp = await client.request(method, path, **kwargs)
             resp.raise_for_status()
@@ -106,7 +135,7 @@ async def create_task(
     priority: str = "media",
     due_date: Optional[str] = None,
     reminders: Optional[List[ReminderInput]] = None,
-    jwt: Optional[str] = None,
+    request: Optional[Request] = None,
 ):
     """Create a task using backend API."""
     payload = TaskCreatePayload(
@@ -116,7 +145,12 @@ async def create_task(
         due_date=due_date,
         reminders=reminders,
     )
-    return await _request("POST", "/api/tasks/", token_override=jwt, json=payload.dict(exclude_none=True))
+    return await _request(
+        "POST",
+        "/api/tasks/",
+        request=request,
+        json=payload.dict(exclude_none=True),
+    )
 
 
 @mcp.tool()
@@ -128,7 +162,7 @@ async def list_tasks(
     end_date: Optional[str] = None,
     limit: int = 10,
     cursor: Optional[str] = None,
-    jwt: Optional[str] = None,
+    request: Optional[Request] = None,
 ):
     """List tasks with filtering and pagination."""
     if view not in {"home", "tasks"}:
@@ -152,25 +186,32 @@ async def list_tasks(
     if cursor:
         params["cursor"] = cursor
 
-    return await _request("GET", "/api/tasks/", token_override=jwt, params=params)
+    return await _request("GET", "/api/tasks/", request=request, params=params)
 
 
 @mcp.tool()
-async def get_task(task_id: str, jwt: Optional[str] = None):
+async def get_task(task_id: str, request: Optional[Request] = None):
     """Get a task by id."""
-    return await _request("GET", f"/api/tasks/{task_id}", token_override=jwt)
+    return await _request("GET", f"/api/tasks/{task_id}", request=request)
 
 
 @mcp.tool()
-async def get_task_related(task_id: str, jwt: Optional[str] = None):
+async def get_task_related(task_id: str, request: Optional[Request] = None):
     """Get tags, notes, and events related to a task."""
-    return await _request("GET", f"/api/tasks/{task_id}/related", token_override=jwt)
+    return await _request("GET", f"/api/tasks/{task_id}/related", request=request)
 
 
 @mcp.tool()
-async def assign_tag_to_task(task_id: str, tag_id: str, jwt: Optional[str] = None):
+async def assign_tag_to_task(
+    task_id: str, tag_id: str, request: Optional[Request] = None
+):
     """Assign a tag to a task."""
-    return await _request("POST", f"/api/tasks/{task_id}/tags", token_override=jwt, json={"tag_id": tag_id})
+    return await _request(
+        "POST",
+        f"/api/tasks/{task_id}/tags",
+        request=request,
+        json={"tag_id": tag_id},
+    )
 
 
 @mcp.tool()
@@ -182,7 +223,7 @@ async def update_task(
     due_date: Optional[str] = None,
     is_completed: Optional[bool] = None,
     reminders: Optional[List[ReminderInput]] = None,
-    jwt: Optional[str] = None,
+    request: Optional[Request] = None,
 ):
     """Patch a task with partial fields."""
     payload = TaskUpdatePayload(
@@ -193,13 +234,18 @@ async def update_task(
         is_completed=is_completed,
         reminders=reminders,
     )
-    return await _request("PATCH", f"/api/tasks/{task_id}", token_override=jwt, json=payload.dict(exclude_none=True))
+    return await _request(
+        "PATCH",
+        f"/api/tasks/{task_id}",
+        request=request,
+        json=payload.dict(exclude_none=True),
+    )
 
 
 @mcp.tool()
-async def delete_task(task_id: str, jwt: Optional[str] = None):
+async def delete_task(task_id: str, request: Optional[Request] = None):
     """Delete a task."""
-    return await _request("DELETE", f"/api/tasks/{task_id}", token_override=jwt)
+    return await _request("DELETE", f"/api/tasks/{task_id}", request=request)
 
 
 def main():
