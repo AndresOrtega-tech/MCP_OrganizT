@@ -2,3 +2,4 @@ fastmcp
 httpx
 pydantic
 python-dotenv
+requests
